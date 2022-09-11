@@ -55,23 +55,19 @@ const MenuButton buttons[] = {
   },
   {
     id: 2,
-    text: "que?"
-  },
-  {
-    id: 3,
-    text: "duppa."
+    text: "Manual mode"
   }
 };
 
-#define NUMFLAKES 10
-#define XPOS 0
-#define YPOS 1
-#define DELTAY 2
-
 int selectedButton = 0;
 int oldSelectedButton = 0;
+int menuPage = -1;
 
-Encoder myEnc(2, 7);
+int targetHumidity = 1000;
+
+bool buttonPress = false;
+
+Encoder myEnc = Encoder(2, 7);
 
 long oldPosition  = -999;
 
@@ -83,48 +79,95 @@ void setup () {
   display.setContrast(30);
   display.display();
 
+  pinMode(8, INPUT_PULLUP);
+
   Serial.begin(9600);
 }
 
 void loop () {
   if (millis() % 100) {
-    if (oldSelectedButton != selectedButton) {
-      display.clearDisplay();
-      oldSelectedButton = selectedButton;
-    }
-    for (int i = 0; i < sizeof(buttons) / sizeof(MenuButton); i++) {
-      if (selectedButton == buttons[i].id) {
-        display.setTextColor(WHITE, BLACK);
-      }
-      display.setCursor(14 - (sizeof(buttons[i].text) * 6), (i * 10) + 3);
-      display.write(buttons[i].text);
-      if (selectedButton == buttons[i].id) {
-        display.setTextColor(BLACK);
-      }
+    display.clearDisplay();
+    switch (menuPage) {
+      case -1:
+        display.setTextSize(1);
+        for (int i = 0; i < sizeof(buttons) / sizeof(MenuButton); i++) {
+          if (selectedButton == buttons[i].id) {
+            display.setTextColor(WHITE, BLACK);
+          }
+          display.setCursor(14 - (sizeof(buttons[i].text) * 6), (i * 10) + 3);
+          display.write(buttons[i].text);
+          if (selectedButton == buttons[i].id) {
+            display.setTextColor(BLACK);
+          }
+        }
+        break;
+      case 1:
+        display.setTextSize(2);
+        display.setCursor(3, 10);
+        int tens = ((targetHumidity % 1000) / 100);
+        int hundreds = targetHumidity / 1000;
+        if (targetHumidity == 1000) display.write(hundreds + 48);
+        if (!(tens == 0 && hundreds == 0)) display.write(tens + 48);
+        int mappedVal = map(targetHumidity, 0, 1000, 0, 77);
+        display.write((int) ((targetHumidity % 100) / 10) + 48);
+        display.write(".");
+        display.write((int) (targetHumidity % 10) + 48);
+        display.write("%");
+        display.drawRect(3, 30, 78, 10, BLACK);
+        display.fillRect(3, 31, mappedVal, 8, BLACK);
     }
     display.display();
+  }
+
+  if (digitalRead(8) == LOW && !buttonPress) {
+    buttonPress = true;
+    if (menuPage != -1) {
+      menuPage = -1;
+    } else {
+      menuPage = selectedButton;
+    }
+  }
+
+  if (digitalRead(8) == HIGH && buttonPress) {
+    buttonPress = false;
   }
 
   long newPosition = myEnc.read();
   if (newPosition < oldPosition - 3 || newPosition > oldPosition + 3) {
     bool right = oldPosition > newPosition;
     oldPosition = newPosition;
-    Serial.println(newPosition);
 
     int maxSize = sizeof(buttons) / sizeof(MenuButton);
 
     if (right) {
-      Serial.println("right");
-      if (selectedButton != maxSize - 1) {
-        selectedButton += 1;
-      } else {
-        selectedButton = 0;
+      switch (menuPage) {
+        case -1:
+          if (selectedButton != maxSize - 1) {
+            selectedButton += 1;
+          } else {
+            selectedButton = 0;
+          }
+          break;
+        case 1:
+          if (targetHumidity != 0) {
+            targetHumidity -= 5;
+          }
+          break;
       }
     } else {
-      if (selectedButton != 0) {
-        selectedButton -= 1;
-      } else {
-        selectedButton = maxSize - 1;
+      switch (menuPage) {
+        case -1:
+          if (selectedButton != 0) {
+            selectedButton -= 1;
+          } else {
+            selectedButton = maxSize - 1;
+          }
+          break;
+        case 1:
+          if (targetHumidity != 1000) {
+            targetHumidity += 5;
+          }
+          break;
       }
     }
   }
